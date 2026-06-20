@@ -20,8 +20,8 @@ The repository is still being shaped around the core product direction, architec
 - Manual host management.
 - Wake-on-LAN and port check workflows.
 - Notifications for newly discovered or state-changing devices.
-- Prometheus metrics and optional time-series integrations.
-- SQLite by default, with PostgreSQL as a possible larger-install option.
+- SQLite-backed persistence.
+- Future Prometheus metrics and optional time-series integrations.
 - Typed API contracts and integration-friendly documentation.
 - Demo mode for development without live network scanning.
 
@@ -32,14 +32,15 @@ The intended production deployment will be similar in spirit to WatchYourLAN:
 - A published container image on GitHub Container Registry.
 - `docker run` and Docker Compose examples.
 - A user-managed `config.yaml` mounted into the container.
+- Environment variable overrides for container-friendly deployment.
 - A mounted data directory for SQLite and persistent app state.
-- Clear configuration for interfaces, scan intervals, notifications, metrics, and storage.
+- Clear configuration for interfaces, scan intervals, notifications, and storage.
 
 Example deployment commands are intentionally omitted until Lantern has a release-ready image and stable configuration format.
 
 ## Development
 
-Lantern is expected to use Bun, TypeScript, React, Vite, Tailwind, and shadcn/ui for the web surface, with a small host-level scanner/runtime service for privileged network operations.
+Lantern is expected to use Bun, TypeScript, React, Vite, Tailwind, and shadcn/ui for the web surface, with a lightweight Bun/Hono backend, SQLite persistence, and a host-level scanner runtime for privileged network operations.
 
 Project planning, architecture notes, upstream feature inventory, and agent workflow guidance live in [CONTEXT.md](CONTEXT.md).
 

@@ -17,27 +17,40 @@ If `opensrc` is not on PATH, install or expose the CLI first. The project-local 
 
 ## Direction
 
-Lantern is a good candidate for a split rewrite: keep network scanning in a small privileged service, then rebuild the product surface in React, TypeScript, Tailwind, and shadcn/ui.
+Lantern is a good candidate for a single-container rewrite: keep privileged network scanning behind a small backend service, then rebuild the product surface in React, TypeScript, Tailwind, and shadcn/ui.
 
-My recommendation is Vite first, not Next.js. Lantern is an authenticated local-network operations tool, not a public content app, and it does not need SSR, static generation, image optimization, or Next route caching. Vite keeps the Docker image smaller, avoids framework-specific server behavior, and fits a single-page dashboard that talks to an API. Use Next.js only if the app server should also own API routes, auth middleware, server actions, or a larger hosted SaaS-style deployment later.
+Use Vite first, not Next.js. Lantern is a local-network operations tool, not a public content app, and it does not need SSR, static generation, image optimization, or Next route caching. Vite keeps the Docker image smaller, avoids framework-specific server behavior, and fits a single-page dashboard that talks to an API. Add auth later by inserting middleware into the API server instead of choosing a heavier frontend framework now.
 
 ## Proposed Architecture
 
 - `apps/web`: React + Vite + TypeScript + Tailwind + shadcn/ui.
-- `apps/agent`: scanner/runtime service that runs near the network interface and owns ARP/NDP scanning, Wake-on-LAN, port checks, notifications, metrics, and database writes.
-- `packages/api`: shared TypeScript types, OpenAPI client, Zod schemas, and API contracts.
+- `apps/server`: Bun + Hono API server that serves the built web app, owns scan scheduling, reads configuration, writes SQLite, and calls scanner adapters.
+- `packages/shared`: shared TypeScript types, Zod schemas, API contracts, and domain models.
 - `packages/ui`: optional shared shadcn/ui wrapper package if this becomes a monorepo with multiple surfaces.
-- `data`: SQLite by default, PostgreSQL optional for larger installs.
+- `data`: SQLite persistence, with the database stored under the mounted container data directory.
 
-The hard part is not the frontend. Browser JavaScript cannot safely replace `arp-scan` because raw ARP/NDP access requires host-level privileges. The rewrite should replace the Go implementation only after choosing a runtime that can do network scanning reliably.
+The hard part is not the frontend. Browser JavaScript cannot safely replace `arp-scan` because raw ARP/NDP access requires host-level privileges. Replace the Go scanner instead of carrying it forward, but keep scanning behind an adapter so the first implementation can shell out to proven Linux tools and later implementations can improve internals without changing the API.
+
+## Current Technical Decisions
+
+- Frontend: Vite, React, TypeScript, Tailwind, and shadcn/ui.
+- Backend: Bun with Hono.
+- Database: SQLite for v1, accessed through Bun SQLite with Drizzle for schema and migrations.
+- API contracts: Zod-first shared schemas in `packages/shared`; generate OpenAPI later if the route surface stabilizes enough to justify it.
+- Scanner: no Go scanner in Lantern. Start with a TypeScript scanner adapter that can call `arp-scan` on Linux Docker, plus a demo scanner for local UI development.
+- Auth: no built-in auth for now. Leave route organization compatible with future Hono middleware.
+- Deployment: one container serving the web app and API, with SQLite data stored in a mounted directory.
+- Configuration: mounted `config.yaml` as the primary user-editable config, with environment variable overrides for container use.
+- Scanner support target: Linux Docker first; macOS and Windows later.
+- License: decide later before release.
 
 ## Backend Runtime Options
 
-- Bun/Node service: best for the preferred stack. Use child processes for `arp-scan`, native Node sockets where possible, and explicit Docker capabilities/host networking. This is viable, but raw network edge cases need careful testing on Linux.
+- Bun/Hono service: chosen path for the preferred stack. Use child processes for `arp-scan`, native sockets where useful, Drizzle-backed SQLite persistence, and explicit Docker capabilities/host networking. This is viable, but raw network edge cases need careful testing on Linux.
 - Rust service: best long-term scanner reliability and tiny binaries. More unfamiliar than TypeScript, but it cleanly fits a local agent.
-- Keep Go temporarily: fastest path. Replace the UI and API contract first, then swap the scanner service behind the same API.
+- Keep Go temporarily: not preferred. Only revisit if TypeScript scanner reliability becomes a blocker.
 
-Recommended path: React/Vite UI first, then TypeScript service extraction, then scanner internals.
+Recommended path: React/Vite UI plus Bun/Hono API first, demo scanner second, SQLite persistence third, Linux `arp-scan` adapter fourth.
 
 ## Bun Project Management
 
@@ -49,8 +62,10 @@ Suggested root scripts:
 {
   "scripts": {
     "dev": "bun run --cwd apps/web dev",
+    "dev:server": "bun run --cwd apps/server dev",
     "build": "bun run --cwd apps/web build",
-    "check-types": "bun run --cwd apps/web tsc --noEmit",
+    "build:server": "bun run --cwd apps/server build",
+    "check-types": "bun run --cwd apps/web tsc --noEmit && bun run --cwd apps/server tsc --noEmit",
     "lint": "bun run --cwd apps/web lint",
     "format": "bun run --cwd apps/web format"
   }
@@ -108,7 +123,7 @@ These are the verified features in the original WatchYourLAN project that should
 ## Feature Recommendations
 
 - First-run setup wizard for interface selection, scan interval, database mode, and notification test.
-- Built-in auth option for home users, while still supporting reverse proxies.
+- Future built-in auth option for home users, while still supporting reverse proxies.
 - IPv6/NDP discovery alongside ARP.
 - Multi-subnet support with named network segments.
 - Better host identity: vendor lookup, DNS names, mDNS names, manual aliases, tags, and notes.
@@ -120,8 +135,8 @@ These are the verified features in the original WatchYourLAN project that should
 - Per-host watch settings and quiet hours.
 - Import/export for hosts, tags, and settings.
 - Webhook integration for Home Assistant, Ntfy, Gotify, Slack, Discord, and generic HTTP.
-- Prometheus metrics that expose host counts, online state, scan duration, scan errors, and notification failures.
-- Grafana dashboard JSON checked into the repo.
+- Future Prometheus metrics that expose host counts, online state, scan duration, scan errors, and notification failures.
+- Future Grafana dashboard JSON checked into the repo.
 - API tokens and OpenAPI docs for integrations.
 - Demo mode with seeded data so the UI can be developed without a live network scan.
 
@@ -131,6 +146,7 @@ Lantern should eventually be deployable by self-hosted users in the same broad s
 
 - Publish a Docker image to GitHub Container Registry.
 - Document `docker run` and Docker Compose examples after the image and config format are stable.
+- Keep the initial deployment as a single container that serves the Vite build, runs the Bun/Hono API, schedules scans, and writes SQLite.
 - Use a mounted `config.yaml` as the primary user-editable configuration file.
 - Use a mounted data directory for SQLite and persistent app state.
 - Support explicit interface, network mode, and Linux capability guidance for scanner access.
@@ -140,34 +156,42 @@ Do not publish example commands in README until the image name, ports, volume pa
 
 ## Migration Plan
 
-1. Freeze the target feature set in README and OpenAPI docs.
-2. Build a React/Vite shell against demo data or the existing WatchYourLAN API shape.
+1. Freeze the target feature set in README and Zod shared schemas.
+2. Build a React/Vite shell against the Bun/Hono API and demo scanner.
 3. Replace inherited UI assumptions with React + shadcn/ui screens.
-4. Add a typed API client generated from OpenAPI or backed by Zod schemas.
-5. Move Docker and Bun scripts to the repo root.
-6. Add demo fixtures and browser tests for the dashboard, host detail page, config, and history.
-7. Extract or rewrite the scanner service once the frontend is stable.
-8. Preserve existing config names where practical so current users can migrate.
+4. Add SQLite persistence through Bun SQLite and Drizzle migrations.
+5. Add a typed API client backed by shared Zod schemas.
+6. Move Docker and Bun scripts to the repo root.
+7. Add demo fixtures and browser tests for the dashboard, host detail page, config, and history.
+8. Add the Linux Docker `arp-scan` adapter behind the scanner interface.
+9. Preserve existing config names where practical so current users can migrate.
 
-## Early Decisions To Make
+## Early Decisions
 
-- Vite-only local dashboard or Next.js app with API/server ownership.
-- Keep Go scanner for one release or rewrite scanner immediately.
-- SQLite-only for v1 rewrite or preserve PostgreSQL from the start.
-- Built-in auth scope: none, basic local login, or full OIDC/reverse-proxy first.
-- Whether the project remains a single container or becomes web plus agent containers.
-- Final license for the open source project.
+- Vite-only local dashboard, not Next.js.
+- Bun/Hono backend inside the same deployable container.
+- Replace the Go scanner instead of keeping it for a release.
+- SQLite-only for v1, using Bun SQLite and Drizzle.
+- No built-in auth until closer to release.
+- Single-container deployment for the initial product.
+- Mounted `config.yaml` plus environment variable overrides.
+- Linux Docker scanner support first; macOS and Windows later.
+- Final license remains undecided.
 
 ## Suggested First Milestone
 
-Ship a modern UI and typed API contract before rewriting all scanner internals:
+Ship a modern UI and typed API contract before over-investing in scanner internals:
 
 - Bun-managed React/Vite app.
+- Bun/Hono API server.
+- Zod-first shared schemas.
+- SQLite persistence through Bun SQLite and Drizzle.
 - Tailwind and shadcn/ui Radix components.
 - Host table with search, filters, sort, row selection, bulk delete, and host detail drawer.
-- Config screens for scan settings, notifications, InfluxDB, and Prometheus.
+- Config screens for scan settings, storage, and notifications.
 - Manual rescan, Wake-on-LAN, port check, and notification test flows.
 - Demo mode for local development without `arp-scan`.
+- Linux Docker `arp-scan` adapter behind a scanner interface.
 
 ## Agent Workflow
 
@@ -186,6 +210,6 @@ When editing this repo:
 
 - Keep README public-facing and minimal until there is runnable software.
 - Keep implementation plans, agent notes, and source-reference workflow in this file.
-- Prefer Bun for package management and scripts.
+- Prefer Bun for package management, scripts, the Hono API server, and SQLite access.
 - Prefer React/Vite/Tailwind/shadcn/ui for the initial web app unless the project direction changes explicitly.
 - Treat upstream WatchYourLAN behavior as reference material, not code to preserve by default.
