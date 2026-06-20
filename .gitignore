@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Monorepo build output
+apps/*/dist
+packages/*/dist
+
+# Mounted SQLite data dir (Plan 004)
+/data
