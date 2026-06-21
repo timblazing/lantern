@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@lantern/shared": "workspace:*"
+    "@hono/zod-validator": "^0.8.0",
+    "@lantern/shared": "workspace:*",
+    "hono": "^4.12.26"
   },
   "devDependencies": {
     "@types/bun": "latest",
