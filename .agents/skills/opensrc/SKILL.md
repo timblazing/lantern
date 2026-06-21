@@ -53,27 +53,26 @@ For PyPI and crates.io, explicit versions or latest are used. For repos, use `@r
 Source is cached globally at `~/.opensrc/` (override with `OPENSRC_HOME`).
 
 ```bash
-opensrc list
-opensrc list --json
+opensrc list                     # show all cached sources
+opensrc list --json              # JSON output
 
-opensrc remove zod
-opensrc remove facebook/react
+opensrc remove zod               # remove a package
+opensrc remove facebook/react    # remove a repo
 
-opensrc clean
-opensrc clean --npm
-opensrc clean --pypi
-opensrc clean --crates
-opensrc clean --packages
-opensrc clean --repos
+opensrc clean                    # remove everything
+opensrc clean --npm              # only npm packages
+opensrc clean --pypi             # only PyPI packages
+opensrc clean --crates           # only crates.io packages
+opensrc clean --packages         # all packages, keep repos
+opensrc clean --repos            # all repos, keep packages
 ```
 
 ## When to Fetch Source
 
 Fetch source when you need to:
-
-- Understand internal behavior that types do not reveal
+- Understand internal behavior that types don't reveal
 - Debug unexpected library behavior
 - Learn patterns from well-known implementations
 - Verify how a function handles edge cases
 
-Do not fetch source for simple API usage questions that docs or types can answer.
+Don't fetch source for simple API usage questions that docs or types can answer.
