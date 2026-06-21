@@ -23,7 +23,7 @@ planning session** — everything needed is inlined in each file.
 | 001 | Monorepo restructure (Bun workspaces) | P1 | M | — | DONE (merged to `main`, commit `147afc4`; verified on HEAD `d464797`) |
 | 002 | Shared Zod schemas & API contract (`packages/shared`) | P1 | M | 001 | DONE (merged to `main`, merge commit `cb6a4f6` / work `fe6678b`; reviewed & approved 2026-06-21) |
 | 003 | Bun/Hono API server + scanner interface + demo scanner | P1 | M | 001, 002 | DONE (merged to `main`, merge commit `e71ce60` / work `db629a3`; reviewed & approved 2026-06-21) |
-| 004 | SQLite persistence via Drizzle | P1 | M | 003 | TODO |
+| 004 | SQLite persistence via Drizzle | P1 | M | 003 | DONE (merged to `main`, merge commit `6b9a068` / work `5d28f79`; reviewed & approved 2026-06-21) |
 | 005 | Typed API client + host table UI | P1 | L | 002, 003 | NOT YET WRITTEN |
 | 006 | Config screens + action flows (rescan/WoL/port-check/notify-test) | P2 | L | 005 | NOT YET WRITTEN |
 | 007 | Linux `arp-scan` adapter + Dockerfile + `config.yaml` | P2 | M | 003, 004 | NOT YET WRITTEN |
@@ -124,6 +124,36 @@ These were noted in plan "Maintenance notes" and are worth tracking:
   macOS and Windows later." Not in the first milestone.
 
 ## Reconcile log
+
+### 2026-06-21 — Plan 004 executed & approved
+
+- Dispatched an executor (Sonnet) in worktree `agent-abc7b38c4e7b93148`; it
+  committed to branch `advisor/004-sqlite-drizzle-persistence`, commit `5d28f79`
+  ("Add SQLite persistence via Drizzle (Plan 004)"). Planned against `da4b4cb`;
+  drift check clean at dispatch (HEAD `a9d141c`, only `plans/` changed since
+  planning). **Merged to `main`** at the user's request (`--no-ff`, merge commit
+  `6b9a068`) and pushed to `origin/main`. Re-verified on `main` post-merge:
+  `bun install` + typecheck exit 0, `bun test apps/server` → 15 pass / 0 fail.
+  Worktree `agent-abc7b38c4e7b93148` + branch pruned after merge.
+- **Independently re-verified in the worktree:** `bun install` exit 0;
+  `bun run --cwd apps/server typecheck` exit 0; `bun test apps/server` → **15
+  pass / 0 fail** (7 existing route tests + 8 new store tests, 33 assertions;
+  plan required ≥4). `grep "implements HostStore"` confirms line 24.
+- **Scope clean:** `git diff --stat main..HEAD` shows only in-scope files +
+  `bun.lock`. Out-of-scope files (`host-store.ts`, `app.ts`, `routes/`,
+  `scanner/`) show **zero diff**. No stray `.db` files committed; tests use
+  `:memory:`. Migration `drizzle/0000_woozy_gateway.sql` is committed and
+  creates both tables with `ON DELETE cascade`.
+- **Diff reviewed:** `SqliteHostStore` is a faithful drop-in for `HostStore`;
+  `applyScan` merge logic (upsert observed, append history on state change, flip
+  unseen-online → offline) ports the in-memory semantics to SQL correctly. Tests
+  assert real behavior including cascade-delete of history and the empty-array
+  edge case. The URL-based migrations-folder path resolved at runtime without
+  the documented fallback. `deleteHosts` reads bun-sqlite's `.changes` and
+  returned 1 correctly. **Verdict: APPROVE.**
+- **Deferred follow-ups now unblocked** (see the deferred list above): scheduled
+  scanning loop and `historyRetentionDays` trimming both build on this store.
+  Plan 007 (real scanner) only touches `src/index.ts` to swap `DemoScanner`.
 
 ### 2026-06-21 — full pass on HEAD `f89c3d5`
 
