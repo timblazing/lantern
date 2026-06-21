@@ -29,3 +29,5 @@ packages/*/dist
 
 # Mounted SQLite data dir (Plan 004)
 /data
+
+.claude/worktrees/
