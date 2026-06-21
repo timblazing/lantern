@@ -78,7 +78,8 @@ Vitest. Tests are `*.test.ts` files colocated in `src`.
 ## Scope
 
 **In scope** (create/modify only these):
-- `packages/shared/package.json` (add `zod` dependency).
+- `packages/shared/package.json` (add `zod` dependency; add `@types/bun` devDependency — see Step 1b).
+- `packages/shared/tsconfig.json` (add `"types": ["bun"]` — see Step 1b).
 - `packages/shared/src/host.ts` (create)
 - `packages/shared/src/config.ts` (create)
 - `packages/shared/src/api.ts` (create)
@@ -110,6 +111,46 @@ bun add --cwd packages/shared zod
 
 **Verify**: `grep zod packages/shared/package.json` → shows a `"zod"` entry;
 `bun install` exit 0.
+
+### Step 1b: Make `bun:test` resolve for the typecheck gate
+
+The Step 6 tests `import { test, expect } from "bun:test"`. The shared
+`tsconfig.json` uses `moduleResolution: "bundler"`, under which TypeScript treats
+`bun:test` as an absolute URI and **skips** node_modules resolution — so merely
+installing `@types/bun` does not make `bun:test` typecheck (verified: the error
+`TS2307: Cannot find module 'bun:test'` persists). The working pattern, already
+used by `apps/server/tsconfig.json`, is to load Bun's types globally via the
+`types` compiler option.
+
+Do both:
+
+1. Add `@types/bun` as a devDependency:
+   ```
+   bun add --cwd packages/shared --dev @types/bun
+   ```
+   (Do NOT also add `bun-types` — `@types/bun` depends on it transitively.)
+2. Edit `packages/shared/tsconfig.json` — add `"types": ["bun"]` to
+   `compilerOptions` (mirror `apps/server/tsconfig.json`). Resulting file:
+   ```jsonc
+   {
+     "compilerOptions": {
+       "target": "es2023",
+       "module": "esnext",
+       "moduleResolution": "bundler",
+       "types": ["bun"],
+       "strict": true,
+       "verbatimModuleSyntax": true,
+       "skipLibCheck": true,
+       "declaration": true,
+       "noEmit": true
+     },
+     "include": ["src"]
+   }
+   ```
+
+**Verify**: `grep '@types/bun' packages/shared/package.json` → present;
+`grep '"types"' packages/shared/tsconfig.json` → `["bun"]`. Full typecheck is
+verified after the test files exist (Step 6).
 
 ### Step 2: Define host schemas in `src/host.ts`
 
